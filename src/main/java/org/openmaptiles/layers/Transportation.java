@@ -281,29 +281,32 @@ public class Transportation implements
     return "residential".equals(highway) || "unclassified".equals(highway);
   }
 
-  // forge-overland: national-grade alphanumeric route refs (M1, A1, A32, ...). In Australia
-  // M/A prefixes mark the national route grid regardless of physical class — Highway 1 rings
-  // the continent mostly as highway=trunk ref=A1 — but the stock network whitelist below is
-  // GB/US-only, so AU trunks never qualified for z5 and the continent view showed the
-  // national network as disconnected motorway stubs.
+  // forge-overland: Australia's national route grid, independent of physical class. Most
+  // states sign alphanumeric M#/A# refs, but WA/NT still sign plain "1"/"87" — there the
+  // national-ness lives in network=AU:WA:NH / AU:NT:NH (NH = National Highway). Highway 1
+  // rings the continent mostly as highway=trunk; stock's network whitelist is GB/US-only,
+  // so the continent view showed the national network as disconnected motorway stubs.
   private static final Pattern NATIONAL_GRADE_REF = Pattern.compile("^[MA][0-9]");
 
-  private static boolean hasNationalGradeRef(String ref, List<RouteRelation> routeRelations) {
-    if (ref != null && NATIONAL_GRADE_REF.matcher(ref).lookingAt()) {
-      return true;
-    }
-    return routeRelations.stream()
-      .map(RouteRelation::ref)
-      .filter(Objects::nonNull)
-      .anyMatch(r -> NATIONAL_GRADE_REF.matcher(r).lookingAt());
+  private static boolean isAuNationalHighwayNetwork(String network) {
+    return network != null && network.startsWith("AU:") && network.endsWith("NH");
   }
 
-  private static boolean isTrunkForZ5(String highway, String ref, List<RouteRelation> routeRelations) {
+  private static boolean isNationalGradeRoute(String ref, String network, List<RouteRelation> routeRelations) {
+    if ((ref != null && NATIONAL_GRADE_REF.matcher(ref).lookingAt()) || isAuNationalHighwayNetwork(network)) {
+      return true;
+    }
+    return routeRelations.stream().anyMatch(r ->
+      (r.ref() != null && NATIONAL_GRADE_REF.matcher(r.ref()).lookingAt()) ||
+        isAuNationalHighwayNetwork(r.network()));
+  }
+
+  private static boolean isTrunkForZ5(String highway, List<RouteRelation> routeRelations) {
     // Allow trunk roads that are part of a nation's most important route network to show at z5
     if (!"trunk".equals(highway)) {
       return false;
     }
-    return hasNationalGradeRef(ref, routeRelations) || routeRelations.stream()
+    return routeRelations.stream()
       .map(RouteRelation::networkType)
       .filter(Objects::nonNull)
       .anyMatch(Z5_TRUNK_BY_NETWORK::contains);
@@ -619,7 +622,16 @@ public class Transportation implements
         case FieldValues.CLASS_TRACK -> 10;
         case FieldValues.CLASS_PATH -> (routeRank == 1 || !nullOrEmpty(element.sacScale())) ? 10 : 11;
         case FieldValues.CLASS_TRUNK -> {
-          boolean z5trunk = isTrunkForZ5(highway, element.ref(), routeRelations);
+          // forge-overland: national-grade routes (M#/A# or AU National Highway network) are
+          // THE continental features — z1, drawn as motorway up to z5 so Highway 1 reads as
+          // one unbroken ribbon around the country instead of colour-flickering fragments.
+          if (isNationalGradeRoute(element.ref(), element.network(), routeRelations)) {
+            highwayClassOverride =
+              z -> z <= 5 ? highwayClass.replace(baseClass, FieldValues.CLASS_MOTORWAY) : highwayClass;
+            yield 1;
+          }
+
+          boolean z5trunk = isTrunkForZ5(highway, routeRelations);
 
           // Allow small trunk segments to be processed at z5 so they can merge with surrounding motorways
           if (isTrunkZ5MergeableLength(element)) {
@@ -637,8 +649,11 @@ public class Transportation implements
           }
           yield (z5trunk) ? 5 : MINZOOMS.getOrDefault(clazz, Integer.MAX_VALUE);
         }
-        case FieldValues.CLASS_MOTORWAY -> isMotorwayForZ4(routeRelations) ?
-          MINZOOMS.getOrDefault(FieldValues.CLASS_MOTORWAY, Integer.MAX_VALUE) : 5;
+        case FieldValues.CLASS_MOTORWAY ->
+          // forge-overland: national-grade motorways from z1 (see CLASS_TRUNK above)
+          isNationalGradeRoute(element.ref(), element.network(), routeRelations) ? 1 :
+            isMotorwayForZ4(routeRelations) ?
+              MINZOOMS.getOrDefault(FieldValues.CLASS_MOTORWAY, Integer.MAX_VALUE) : 5;
         default -> MINZOOMS.getOrDefault(baseClass, Integer.MAX_VALUE);
       };
     }
