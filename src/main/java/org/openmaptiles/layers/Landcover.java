@@ -76,10 +76,13 @@ public class Landcover implements
    * had through using a temporary "_numpoints" attribute.
    */
 
+  // forge-overland: relaxed from stock (z<=9: 2px, z10: 4px, z11-13: 8px), which held
+  // small woods back until z12-13 (~600m minimum footprint through z11). Now: ~150m
+  // patches arrive by z11 instead of z13, and the new z5-6 range only keeps forests
+  // bigger than ~5-10km — big enough to matter on a continental view.
   public static final ZoomFunction<Number> MIN_PIXEL_SIZE_THRESHOLDS = ZoomFunction.fromMaxZoomThresholds(Map.of(
-    13, 8,
-    10, 4,
-    9, 2
+    13, 4,
+    11, 2
   ));
   private static final String TEMP_NUM_POINTS_ATTR = "_numpoints";
   private static final Set<String> WOOD_OR_FOREST = Set.of(
@@ -131,7 +134,10 @@ public class Landcover implements
         .setAttr(Fields.CLASS, clazz)
         .setAttr(Fields.SUBCLASS, subclass)
         .setNumPointsAttr(TEMP_NUM_POINTS_ATTR)
-        .setMinZoom(7);
+        // forge-overland: stock z7 floor meant NO forests at all below z7 (below that,
+        // landcover is Natural Earth glaciers only — Australia goes bald). z5 with the
+        // coarse min-pixel cull keeps the continent's green structure when zoomed out.
+        .setMinZoom(5);
     }
   }
 

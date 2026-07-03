@@ -122,10 +122,13 @@ public class Park implements
     String clazz = parkClass(element);
 
     // park shape
+    // forge-overland: stock floor was z4 (and class only from z5) — but national parks are
+    // THE continental-scale feature on an Australian paper map. Floor z1; the 2px min size
+    // stays as the natural generaliser (small parks drop out at small scales, big ones hold).
     var outline = features.polygon(LAYER_NAME).setBufferPixels(BUFFER_SIZE)
-      .setAttrWithMinzoom(Fields.CLASS, clazz, 5)
+      .setAttr(Fields.CLASS, clazz)
       .setMinPixelSize(2)
-      .setMinZoom(4);
+      .setMinZoom(1);
 
     // park name label point (if it has one)
     if (element.name() != null) {
@@ -158,7 +161,8 @@ public class Park implements
     // sql filter:    area > 70000*2^(20-zoom_level)
     // simplifies to: zoom_level > 20 - log(area / 70000) / log(2)
     int minzoom = (int) Math.floor(20 - Math.log(area / WORLD_AREA_FOR_70K_SQUARE_METERS) / LOG2);
-    minzoom = Math.clamp(minzoom, 5, 14);
+    // forge-overland: let the truly huge parks (Kakadu class) label from z3, not z5
+    minzoom = Math.clamp(minzoom, 3, 14);
     return minzoom;
   }
 
