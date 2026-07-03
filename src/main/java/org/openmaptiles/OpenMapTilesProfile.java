@@ -57,6 +57,7 @@ public class OpenMapTilesProfile extends ForwardingProfile {
   private final MultiExpression.Index<Boolean> wikidataMappings;
   /** forge-overland: attach every raw OSM tag as osm_* at z14, so the map can show ground truth. */
   private final boolean debugOsmTags;
+  private final int debugOsmTagsMinzoom;
 
   public OpenMapTilesProfile(Planetiler runner) {
     this(runner.translations(), runner.config(), runner.stats());
@@ -68,6 +69,12 @@ public class OpenMapTilesProfile extends ForwardingProfile {
       "debug_osm_tags",
       "forge-overland: attach all raw OSM tags to output features as osm_* attributes at max zoom (debug)",
       false
+    );
+    this.debugOsmTagsMinzoom = config.arguments().getInteger(
+      "debug_osm_tags_minzoom",
+      "forge-overland: zoom from which debug_osm_tags attaches raw tags (lower = bigger tiles AND " +
+        "busts same-attribute feature merging at mid zooms)",
+      14
     );
 
     // register release/finish/feature postprocessor/osm relationship handler methods...
@@ -158,7 +165,7 @@ public class OpenMapTilesProfile extends ForwardingProfile {
     if (debugOsmTags && OSM_SOURCE.equals(sourceFeature.getSource()) && !sourceFeature.tags().isEmpty()) {
       for (var feature : features) {
         for (var tag : sourceFeature.tags().entrySet()) {
-          feature.setAttrWithMinzoom("osm_" + tag.getKey(), tag.getValue(), 14);
+          feature.setAttrWithMinzoom("osm_" + tag.getKey(), tag.getValue(), debugOsmTagsMinzoom);
         }
       }
     }
