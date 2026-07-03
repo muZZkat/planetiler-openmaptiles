@@ -286,19 +286,34 @@ public class Transportation implements
   // national-ness lives in network=AU:WA:NH / AU:NT:NH (NH = National Highway). Highway 1
   // rings the continent mostly as highway=trunk; stock's network whitelist is GB/US-only,
   // so the continent view showed the national network as disconnected motorway stubs.
-  private static final Pattern NATIONAL_GRADE_REF = Pattern.compile("^[MA][0-9]");
+  //
+  // Signed routes are M/A + 1-2 digits EXACTLY: Main Roads WA's internal asset register
+  // also lives in OSM as route relations (ref=M027 network=AU:WA on the Brockman Highway),
+  // and a loose prefix match promoted those filing codes to the national grid.
+  private static final Pattern NATIONAL_GRADE_REF = Pattern.compile("^[MA][0-9]{1,2}$");
+
+  private static boolean refIsNationalGrade(String ref) {
+    if (ref == null) {
+      return false;
+    }
+    for (String part : ref.split("[;/]")) {
+      if (NATIONAL_GRADE_REF.matcher(part.strip()).matches()) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   private static boolean isAuNationalHighwayNetwork(String network) {
     return network != null && network.startsWith("AU:") && network.endsWith("NH");
   }
 
   private static boolean isNationalGradeRoute(String ref, String network, List<RouteRelation> routeRelations) {
-    if ((ref != null && NATIONAL_GRADE_REF.matcher(ref).lookingAt()) || isAuNationalHighwayNetwork(network)) {
+    if (refIsNationalGrade(ref) || isAuNationalHighwayNetwork(network)) {
       return true;
     }
     return routeRelations.stream().anyMatch(r ->
-      (r.ref() != null && NATIONAL_GRADE_REF.matcher(r.ref()).lookingAt()) ||
-        isAuNationalHighwayNetwork(r.network()));
+      refIsNationalGrade(r.ref()) || isAuNationalHighwayNetwork(r.network()));
   }
 
   private static boolean isTrunkForZ5(String highway, List<RouteRelation> routeRelations) {
