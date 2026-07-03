@@ -281,12 +281,29 @@ public class Transportation implements
     return "residential".equals(highway) || "unclassified".equals(highway);
   }
 
-  private static boolean isTrunkForZ5(String highway, List<RouteRelation> routeRelations) {
+  // forge-overland: national-grade alphanumeric route refs (M1, A1, A32, ...). In Australia
+  // M/A prefixes mark the national route grid regardless of physical class — Highway 1 rings
+  // the continent mostly as highway=trunk ref=A1 — but the stock network whitelist below is
+  // GB/US-only, so AU trunks never qualified for z5 and the continent view showed the
+  // national network as disconnected motorway stubs.
+  private static final Pattern NATIONAL_GRADE_REF = Pattern.compile("^[MA][0-9]");
+
+  private static boolean hasNationalGradeRef(String ref, List<RouteRelation> routeRelations) {
+    if (ref != null && NATIONAL_GRADE_REF.matcher(ref).lookingAt()) {
+      return true;
+    }
+    return routeRelations.stream()
+      .map(RouteRelation::ref)
+      .filter(Objects::nonNull)
+      .anyMatch(r -> NATIONAL_GRADE_REF.matcher(r).lookingAt());
+  }
+
+  private static boolean isTrunkForZ5(String highway, String ref, List<RouteRelation> routeRelations) {
     // Allow trunk roads that are part of a nation's most important route network to show at z5
     if (!"trunk".equals(highway)) {
       return false;
     }
-    return routeRelations.stream()
+    return hasNationalGradeRef(ref, routeRelations) || routeRelations.stream()
       .map(RouteRelation::networkType)
       .filter(Objects::nonNull)
       .anyMatch(Z5_TRUNK_BY_NETWORK::contains);
@@ -602,7 +619,7 @@ public class Transportation implements
         case FieldValues.CLASS_TRACK -> 10;
         case FieldValues.CLASS_PATH -> (routeRank == 1 || !nullOrEmpty(element.sacScale())) ? 10 : 11;
         case FieldValues.CLASS_TRUNK -> {
-          boolean z5trunk = isTrunkForZ5(highway, routeRelations);
+          boolean z5trunk = isTrunkForZ5(highway, element.ref(), routeRelations);
 
           // Allow small trunk segments to be processed at z5 so they can merge with surrounding motorways
           if (isTrunkZ5MergeableLength(element)) {
