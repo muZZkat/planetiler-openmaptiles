@@ -55,6 +55,8 @@ public class OpenMapTilesProfile extends ForwardingProfile {
   private final MultiExpression.Index<RowDispatch> osmMappings;
   /** Index variant that filters out any table only used by layers that implement IgnoreWikidata class. */
   private final MultiExpression.Index<Boolean> wikidataMappings;
+  /** forge-overland: attach every raw OSM tag as osm_* at z14, so the map can show ground truth. */
+  private final boolean debugOsmTags;
 
   public OpenMapTilesProfile(Planetiler runner) {
     this(runner.translations(), runner.config(), runner.stats());
@@ -62,6 +64,11 @@ public class OpenMapTilesProfile extends ForwardingProfile {
 
   public OpenMapTilesProfile(Translations translations, PlanetilerConfig config, Stats stats) {
     super(config);
+    this.debugOsmTags = config.arguments().getBoolean(
+      "debug_osm_tags",
+      "forge-overland: attach all raw OSM tags to output features as osm_* attributes at max zoom (debug)",
+      false
+    );
 
     // register release/finish/feature postprocessor/osm relationship handler methods...
     List<Handler> layers = new ArrayList<>();
@@ -139,6 +146,21 @@ public class OpenMapTilesProfile extends ForwardingProfile {
           }
         }
       });
+    }
+  }
+
+  @Override
+  public void processFeature(SourceFeature sourceFeature, FeatureCollector features) {
+    super.processFeature(sourceFeature, features);
+    // forge-overland debug: after the layers have emitted their (schema-processed) features,
+    // decorate each one with every raw OSM tag as osm_<key>, z14 only (z14 overzooms beyond,
+    // so any close inspection shows ground truth without bloating the lower-zoom pyramid).
+    if (debugOsmTags && OSM_SOURCE.equals(sourceFeature.getSource()) && !sourceFeature.tags().isEmpty()) {
+      for (var feature : features) {
+        for (var tag : sourceFeature.tags().entrySet()) {
+          feature.setAttrWithMinzoom("osm_" + tag.getKey(), tag.getValue(), 14);
+        }
+      }
     }
   }
 
