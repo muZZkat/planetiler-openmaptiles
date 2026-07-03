@@ -123,11 +123,14 @@ public class Park implements
 
     // park shape
     // forge-overland: stock floor was z4 (and class only from z5) — but national parks are
-    // THE continental-scale feature on an Australian paper map. Floor z1; the 2px min size
-    // stays as the natural generaliser (small parks drop out at small scales, big ones hold).
+    // THE continental-scale feature on an Australian paper map. Floor z1, and the min-pixel
+    // cull is class-aware: stock's flat 2px meant a park needed ~380km2 to survive tile z4
+    // (viewport z5 — MapLibre renders 512px vector tiles a level behind), so mid-size
+    // national parks (Pilliga class, ~85km2) winked out while Kosciuszko held. National
+    // parks now cull at 0.5px (~24km2 at tile z4), lesser reserves at 1px.
     var outline = features.polygon(LAYER_NAME).setBufferPixels(BUFFER_SIZE)
       .setAttr(Fields.CLASS, clazz)
-      .setMinPixelSize(2)
+      .setMinPixelSize("national_park".equals(clazz) ? 0.5 : 1)
       .setMinZoom(1);
 
     // park name label point (if it has one)
