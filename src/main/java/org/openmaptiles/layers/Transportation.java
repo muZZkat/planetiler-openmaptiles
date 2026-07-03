@@ -194,13 +194,16 @@ public class Transportation implements
       "transportation(_name) layer: show all paths on z13",
       false
     );
+    // forge-overland: roads/tracks/paths persist to much lower zooms than stock OMT —
+    // the whole point of this fork. Paper-map behaviour: the road network never
+    // "thins out" underneath you while navigating.
     MINZOOMS = Map.ofEntries(
-      entry(FieldValues.CLASS_PATH, z13Paths ? 13 : 14),
-      entry(FieldValues.CLASS_TRACK, 14),
-      entry(FieldValues.CLASS_SERVICE, 13),
-      entry(FieldValues.CLASS_MINOR, 13),
+      entry(FieldValues.CLASS_PATH, 11),
+      entry(FieldValues.CLASS_TRACK, 10),
+      entry(FieldValues.CLASS_SERVICE, 12),
+      entry(FieldValues.CLASS_MINOR, 10),
       entry(FieldValues.CLASS_RACEWAY, 12),
-      entry(FieldValues.CLASS_TERTIARY, 11),
+      entry(FieldValues.CLASS_TERTIARY, 9),
       entry(FieldValues.CLASS_BUSWAY, 11),
       entry(FieldValues.CLASS_BUS_GUIDEWAY, 11),
       entry(FieldValues.CLASS_SECONDARY, 9),
@@ -216,9 +219,13 @@ public class Transportation implements
       SURFACE_UNPAVED_VALUES.contains(value) ? FieldValues.SURFACE_UNPAVED : null;
   }
 
-  /** Returns a value for {@code access} tag constrained to a small set of known values from raw OSM data. */
+  /**
+   * Returns a value for {@code access} tag constrained to a small set of known values from raw OSM data.
+   * forge-overland: keep the raw value ("private" vs "no") instead of collapsing to "no", so private
+   * roads/driveways can be styled distinctly from hard-closed ones.
+   */
   private static String access(String value) {
-    return value == null ? null : ACCESS_NO_VALUES.contains(value) ? "no" : null;
+    return value == null ? null : ACCESS_NO_VALUES.contains(value) ? value : null;
   }
 
   /** Returns a value for {@code service} tag constrained to a small set of known values from raw OSM data. */
@@ -528,13 +535,20 @@ public class Transportation implements
         .setAttrWithMinzoom(Fields.OFFICIAL, official(highway, element.informal(), element.operator()), 9)
         .setAttrWithMinzoom(Fields.ACCESS, access(element.access()), 9)
         .setAttrWithMinzoom(Fields.TOLL, element.toll() ? 1 : null, 9)
+        // forge-overland: carry the overlanding/hiking detail stock OMT drops. tracktype
+        // (grade1-5) + sac_scale from first appearance (z10); smoothness/noexit from z11.
+        .setAttrWithMinzoom("tracktype", nullIfEmpty(element.tracktype()), 10)
+        .setAttrWithMinzoom("sac_scale", nullIfEmpty(element.sacScale()), 10)
+        .setAttrWithMinzoom("4wd_only", "yes".equals(element.source().getString("4wd_only")) ? 1 : null, 10)
+        .setAttrWithMinzoom("smoothness", nullIfEmpty(element.source().getString("smoothness")), 11)
+        .setAttrWithMinzoom("noexit", "yes".equals(element.source().getString("noexit")) ? 1 : null, 11)
         // sometimes z9+, sometimes z12+
         .setAttr(Fields.RAMP, minzoom >= 12 ? rampAboveZ12 :
           ((ZoomFunction<Integer>) z -> z < 9 ? null : z >= 12 ? rampAboveZ12 : rampBelowZ12))
-        // z12+
+        // z12+ (forge-overland: surface from z10 so tracks carry paved/unpaved from first appearance)
         .setAttrWithMinzoom(Fields.SERVICE, service, 12)
         .setAttrWithMinzoom(Fields.ONEWAY, nullIfInt(element.isOneway(), 0), 12)
-        .setAttrWithMinzoom(Fields.SURFACE, surface(coalesce(element.surface(), element.tracktype())), 12)
+        .setAttrWithMinzoom(Fields.SURFACE, surface(coalesce(element.surface(), element.tracktype())), 10)
         .setMinPixelSize(0) // merge during post-processing, then limit by size
         .setSortKey(element.zOrder())
         .setMinZoom(minzoom);
@@ -577,13 +591,16 @@ public class Transportation implements
     if ("pier".equals(element.manMade())) {
       minzoom = 13;
     } else if (isResidentialOrUnclassified(highway)) {
-      minzoom = 12;
+      minzoom = 10; // forge-overland: stock 12
     } else {
       String baseClass = highwayClass.replace("_construction", "");
       minzoom = switch (baseClass) {
-        case FieldValues.CLASS_SERVICE -> isDrivewayOrParkingAisle(service(element.service())) ? 14 : 13;
-        case FieldValues.CLASS_TRACK, FieldValues.CLASS_PATH -> routeRank == 1 ? 12 :
-          (z13Paths || !nullOrEmpty(element.name()) || routeRank <= 2 || !nullOrEmpty(element.sacScale())) ? 13 : 14;
+        // forge-overland: driveways/parking aisles one zoom later than other service roads
+        case FieldValues.CLASS_SERVICE -> isDrivewayOrParkingAisle(service(element.service())) ? 13 : 12;
+        // forge-overland: tracks are the overlanding backbone — z10 flat. Paths z11,
+        // promoted to z10 when they're a major route or a graded (sac_scale) hike.
+        case FieldValues.CLASS_TRACK -> 10;
+        case FieldValues.CLASS_PATH -> (routeRank == 1 || !nullOrEmpty(element.sacScale())) ? 10 : 11;
         case FieldValues.CLASS_TRUNK -> {
           boolean z5trunk = isTrunkForZ5(highway, routeRelations);
 
