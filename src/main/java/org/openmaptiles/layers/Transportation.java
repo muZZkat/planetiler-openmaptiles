@@ -207,7 +207,9 @@ public class Transportation implements
       entry(FieldValues.CLASS_BUSWAY, 11),
       entry(FieldValues.CLASS_BUS_GUIDEWAY, 11),
       entry(FieldValues.CLASS_SECONDARY, 9),
-      entry(FieldValues.CLASS_PRIMARY, 7),
+      // forge-overland: primaries from z1 — the unnumbered arterial web joins the
+      // continental view (Human's call: the map is sparse enough to carry it)
+      entry(FieldValues.CLASS_PRIMARY, 1),
       entry(FieldValues.CLASS_TRUNK, 6),
       entry(FieldValues.CLASS_MOTORWAY, 4)
     );
