@@ -304,16 +304,34 @@ public class Transportation implements
     return false;
   }
 
-  private static boolean isAuNationalHighwayNetwork(String network) {
-    return network != null && network.startsWith("AU:") && network.endsWith("NH");
+  // NZ State Highways: ways carry ref="SH 1" / "SH 6A", relations network=NZ:SH.
+  private static final Pattern NZ_STATE_HIGHWAY_REF = Pattern.compile("^SH ?[0-9]{1,3}[A-B]?$");
+
+  private static boolean isNationalHighwayNetwork(String network) {
+    if (network == null) {
+      return false;
+    }
+    return (network.startsWith("AU:") && network.endsWith("NH")) || network.startsWith("NZ:SH");
+  }
+
+  private static boolean refIsNzStateHighway(String ref) {
+    if (ref == null) {
+      return false;
+    }
+    for (String part : ref.split("[;/]")) {
+      if (NZ_STATE_HIGHWAY_REF.matcher(part.strip()).matches()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean isNationalGradeRoute(String ref, String network, List<RouteRelation> routeRelations) {
-    if (refIsNationalGrade(ref) || isAuNationalHighwayNetwork(network)) {
+    if (refIsNationalGrade(ref) || refIsNzStateHighway(ref) || isNationalHighwayNetwork(network)) {
       return true;
     }
     return routeRelations.stream().anyMatch(r ->
-      refIsNationalGrade(r.ref()) || isAuNationalHighwayNetwork(r.network()));
+      refIsNationalGrade(r.ref()) || refIsNzStateHighway(r.ref()) || isNationalHighwayNetwork(r.network()));
   }
 
   private static boolean isTrunkForZ5(String highway, List<RouteRelation> routeRelations) {
