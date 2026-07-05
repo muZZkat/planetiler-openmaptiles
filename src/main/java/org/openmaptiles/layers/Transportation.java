@@ -575,6 +575,11 @@ public class Transportation implements
         // main attributes at all zoom levels (used for grouping <= z8)
         .setAttr(Fields.CLASS, coalesce(minZoomAndNewClass.classOverride, highwayClass))
         .setAttr(Fields.SUBCLASS, highwaySubclass(highwayClass, element.publicTransport(), highway))
+        // forge-overland: route-grade flag — every segment of a national-grade route
+        // (M#/A#, AU NH, NZ SH) regardless of physical class. The style paints the
+        // national network one consistent colour off this, not off class.
+        .setAttr("national",
+          isNationalGradeRoute(element.ref(), element.network(), getRouteRelations(element)) ? 1 : null)
         .setAttr(Fields.NETWORK, networkType != null ? networkType.name : null)
         .setAttrWithMinSize(Fields.BRUNNEL, brunnel(element.isBridge(), element.isTunnel(), element.isFord()), 4, 4, 12)
         // z8+
@@ -657,19 +662,14 @@ public class Transportation implements
         case FieldValues.CLASS_TRACK -> 10;
         case FieldValues.CLASS_PATH -> (routeRank == 1 || !nullOrEmpty(element.sacScale())) ? 10 : 11;
         case FieldValues.CLASS_TRUNK -> {
-          // forge-overland: national-grade routes (M#/A# or AU National Highway network) are
-          // THE continental features — z1. Class stays honest trunk at EVERY zoom (no
-          // motorway rewrite): the Human hated the green->red flip on zoom-in, and Hema's
-          // own continental view is red highway with green motorway sections, not one
-          // artificially-uniform ribbon.
-          if (isNationalGradeRoute(element.ref(), element.network(), routeRelations)) {
-            yield 1;
-          }
-
           boolean z5trunk = isTrunkForZ5(highway, routeRelations);
 
-          // Allow small trunk segments to be processed at z5 so they can merge with surrounding motorways
-          if (isTrunkZ5MergeableLength(element)) {
+          // Allow small trunk segments to be processed at z5 so they can merge with surrounding
+          // motorways. forge-overland: skipped for national-grade routes — they're promoted to
+          // z1 with an honest class below, and the "national" attribute (not class) carries
+          // their consistent colour; rewriting class would just make the inspector lie.
+          if (isTrunkZ5MergeableLength(element) &&
+            !isNationalGradeRoute(element.ref(), element.network(), routeRelations)) {
             z5trunk = true;
             highwayClassOverride =
               z -> z <= 5 ? highwayClass.replace(baseClass, FieldValues.CLASS_MOTORWAY) : highwayClass;
@@ -684,17 +684,21 @@ public class Transportation implements
           }
           yield (z5trunk) ? 5 : MINZOOMS.getOrDefault(clazz, Integer.MAX_VALUE);
         }
-        case FieldValues.CLASS_MOTORWAY ->
-          // forge-overland: national-grade motorways from z1 (see CLASS_TRUNK above)
-          isNationalGradeRoute(element.ref(), element.network(), routeRelations) ? 1 :
-            isMotorwayForZ4(routeRelations) ?
-              MINZOOMS.getOrDefault(FieldValues.CLASS_MOTORWAY, Integer.MAX_VALUE) : 5;
+        case FieldValues.CLASS_MOTORWAY -> isMotorwayForZ4(routeRelations) ?
+          MINZOOMS.getOrDefault(FieldValues.CLASS_MOTORWAY, Integer.MAX_VALUE) : 5;
         default -> MINZOOMS.getOrDefault(baseClass, Integer.MAX_VALUE);
       };
     }
 
     if (isLink(highway) || isLink(construction)) {
       minzoom = Math.max(minzoom, 9);
+    } else if (isNationalGradeRoute(element.ref(), element.network(), routeRelations)) {
+      // forge-overland: ANY segment of a national-grade route (M#/A#, AU National Highway,
+      // NZ State Highway) shows from z1, whatever its physical class — so the national ring
+      // never gaps where a highway drops to primary/secondary through a town. The paired
+      // "national" attribute (see process()) lets the style paint the whole network one
+      // consistent colour while class stays honest for inspection.
+      minzoom = 1;
     }
     return new MinZoomAndNewClass(minzoom, highwayClassOverride);
   }
