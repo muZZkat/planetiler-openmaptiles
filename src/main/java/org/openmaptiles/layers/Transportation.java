@@ -326,12 +326,42 @@ public class Transportation implements
     return false;
   }
 
-  private static boolean isNationalGradeRoute(String ref, String network, List<RouteRelation> routeRelations) {
-    if (refIsNationalGrade(ref) || refIsNzStateHighway(ref) || isNationalHighwayNetwork(network)) {
-      return true;
+  // The 1-family: Highway 1 / SH 1 — the ring. "M1", "A1", "SH 1", plain "1" (WA/NT/Tas NH
+  // signage), but NOT A11/M12/B1 (no other digits, no B).
+  private static final Pattern RING_REF = Pattern.compile("^(?:M|A|SH ?)?1$");
+
+  private static boolean anyRefPart(String ref, Pattern p) {
+    if (ref == null) {
+      return false;
     }
-    return routeRelations.stream().anyMatch(r ->
-      refIsNationalGrade(r.ref()) || refIsNzStateHighway(r.ref()) || isNationalHighwayNetwork(r.network()));
+    for (String part : ref.split("[;/]")) {
+      if (p.matcher(part.strip()).matches()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * forge-overland route grade: 1 = the 1-family ring (M1/A1/1/SH 1) — THE national artery,
+   * drawn green at every zoom; 2 = the rest of the numbered route grid (other M#/A# refs,
+   * AU National Highway network, NZ State Highways) — drawn red; 0 = ungraded.
+   */
+  private static int routeGrade(String ref, String network, List<RouteRelation> routeRelations) {
+    if (anyRefPart(ref, RING_REF) ||
+      routeRelations.stream().anyMatch(r -> anyRefPart(r.ref(), RING_REF))) {
+      return 1;
+    }
+    if (refIsNationalGrade(ref) || refIsNzStateHighway(ref) || isNationalHighwayNetwork(network) ||
+      routeRelations.stream().anyMatch(r ->
+        refIsNationalGrade(r.ref()) || refIsNzStateHighway(r.ref()) || isNationalHighwayNetwork(r.network()))) {
+      return 2;
+    }
+    return 0;
+  }
+
+  private static boolean isNationalGradeRoute(String ref, String network, List<RouteRelation> routeRelations) {
+    return routeGrade(ref, network, routeRelations) > 0;
   }
 
   private static boolean isTrunkForZ5(String highway, List<RouteRelation> routeRelations) {
@@ -575,11 +605,14 @@ public class Transportation implements
         // main attributes at all zoom levels (used for grouping <= z8)
         .setAttr(Fields.CLASS, coalesce(minZoomAndNewClass.classOverride, highwayClass))
         .setAttr(Fields.SUBCLASS, highwaySubclass(highwayClass, element.publicTransport(), highway))
-        // forge-overland: route-grade flag — every segment of a national-grade route
-        // (M#/A#, AU NH, NZ SH) regardless of physical class. The style paints the
-        // national network one consistent colour off this, not off class.
-        .setAttr("national",
-          isNationalGradeRoute(element.ref(), element.network(), getRouteRelations(element)) ? 1 : null)
+        // forge-overland: route grade — 1 = the Highway-1 ring family (green), 2 = the rest
+        // of the numbered route grid (red), absent = ungraded. The style colours by this,
+        // not by physical class.
+        .setAttr("national", switch (routeGrade(element.ref(), element.network(), getRouteRelations(element))) {
+          case 1 -> 1;
+          case 2 -> 2;
+          default -> null;
+        })
         .setAttr(Fields.NETWORK, networkType != null ? networkType.name : null)
         .setAttrWithMinSize(Fields.BRUNNEL, brunnel(element.isBridge(), element.isTunnel(), element.isFord()), 4, 4, 12)
         // z8+
