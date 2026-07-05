@@ -138,6 +138,34 @@ public class Landcover implements
         // landcover is Natural Earth glaciers only — Australia goes bald). z5 with the
         // coarse min-pixel cull keeps the continent's green structure when zoomed out.
         .setMinZoom(5);
+
+      // forge-overland: promote Australian state forests into the park layer. Most are
+      // mapped as plain landuse=forest (+ name) — anonymous wood here, never reaching
+      // Park.java — yet on an AU paper map the state-forest estate is first-class,
+      // coloured distinctly from national parks. Emit a park polygon (class=state_forest)
+      // and a gridded label point alongside the normal landcover wood.
+      String name = element.source().getString("name");
+      if (Park.isStateForest(element.source().getString("protection_title"), name)) {
+        features.polygon(OpenMapTilesSchema.Park.LAYER_NAME).setBufferPixels(4)
+          .setAttr("class", "state_forest")
+          .setAttrWithMinzoom("name", name, 5)
+          .setMinPixelSize(1)
+          .setMinZoom(1);
+        if (name != null) {
+          try {
+            double area = element.source().area();
+            int labelMinzoom = (int) Math.clamp(
+              Math.floor(20 - Math.log(area / Park.WORLD_AREA_FOR_70K_SQUARE_METERS) / Park.LOG2), 6, 14);
+            features.pointOnSurface(OpenMapTilesSchema.Park.LAYER_NAME).setBufferPixels(256)
+              .setAttr("class", "state_forest")
+              .setAttr("name", name)
+              .setPointLabelGridPixelSize(14, 100)
+              .setMinZoom(labelMinzoom);
+          } catch (GeometryException e) {
+            // no label point for an un-measurable geometry; the fill still draws
+          }
+        }
+      }
     }
   }
 

@@ -72,10 +72,22 @@ public class Park implements
   ForwardingProfile.LayerPostProcessor {
 
   // constants for determining the minimum zoom level for a park label based on its area
-  private static final double WORLD_AREA_FOR_70K_SQUARE_METERS =
+  static final double WORLD_AREA_FOR_70K_SQUARE_METERS =
     Math.pow(GeoUtils.metersToPixelAtEquator(0, Math.sqrt(70_000)) / 256d, 2);
-  private static final double LOG2 = Math.log(2);
+  static final double LOG2 = Math.log(2);
   private static final double SMALLEST_PARK_WORLD_AREA = Math.pow(4, -26); // 2^14 tiles, 2^12 pixels per tile
+
+  /** forge-overland: does this protection title / name mark an Australian state forest? */
+  static boolean isStateForest(String protectionTitle, String name) {
+    if (protectionTitle != null && protectionTitle.equalsIgnoreCase("state forest")) {
+      return true;
+    }
+    if (name == null) {
+      return false;
+    }
+    String n = name.toLowerCase();
+    return n.contains("state forest") || n.contains("timber reserve");
+  }
   private static final Map<String, String> PROTECT_CLASS_MAP = Map.ofEntries(
     entry("1a", "conservation"),
     entry("1b", "wilderness_preserve"),
@@ -97,6 +109,12 @@ public class Park implements
   private String parkClass(Tables.OsmParkPolygon element) {
     if (element.maritime()) {
       return "marine";
+    } else if (isStateForest(element.protectionTitle(), element.name())) {
+      // forge-overland: state forests are a first-class estate on Australian paper maps
+      // (own colour, distinct from national parks). They reach this layer via
+      // leisure=nature_reserve or boundary=protected_area tagging; the (more common)
+      // plain landuse=forest ones are promoted from the landcover processing instead.
+      return "state_forest";
     } else if ("national_park".equals(element.boundary())) {
       return "national_park";
     } else if ("protected_area".equals(element.boundary())) {
