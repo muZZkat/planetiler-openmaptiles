@@ -580,10 +580,12 @@ public class Transportation implements
         // sometimes z9+, sometimes z12+
         .setAttr(Fields.RAMP, minzoom >= 12 ? rampAboveZ12 :
           ((ZoomFunction<Integer>) z -> z < 9 ? null : z >= 12 ? rampAboveZ12 : rampBelowZ12))
-        // z12+ (forge-overland: surface from z10 so tracks carry paved/unpaved from first appearance)
+        // z12+ (forge-overland: surface always — sealed-vs-unsealed is the PRIMARY visual
+        // split of an overland map at every zoom; the Tanami and the Gibb must read
+        // unsealed even on the continental view)
         .setAttrWithMinzoom(Fields.SERVICE, service, 12)
         .setAttrWithMinzoom(Fields.ONEWAY, nullIfInt(element.isOneway(), 0), 12)
-        .setAttrWithMinzoom(Fields.SURFACE, surface(coalesce(element.surface(), element.tracktype())), 10)
+        .setAttr(Fields.SURFACE, surface(coalesce(element.surface(), element.tracktype())))
         .setMinPixelSize(0) // merge during post-processing, then limit by size
         .setSortKey(element.zOrder())
         .setMinZoom(minzoom);
