@@ -640,11 +640,11 @@ public class Transportation implements
         case FieldValues.CLASS_PATH -> (routeRank == 1 || !nullOrEmpty(element.sacScale())) ? 10 : 11;
         case FieldValues.CLASS_TRUNK -> {
           // forge-overland: national-grade routes (M#/A# or AU National Highway network) are
-          // THE continental features — z1, drawn as motorway up to z5 so Highway 1 reads as
-          // one unbroken ribbon around the country instead of colour-flickering fragments.
+          // THE continental features — z1. Class stays honest trunk at EVERY zoom (no
+          // motorway rewrite): the Human hated the green->red flip on zoom-in, and Hema's
+          // own continental view is red highway with green motorway sections, not one
+          // artificially-uniform ribbon.
           if (isNationalGradeRoute(element.ref(), element.network(), routeRelations)) {
-            highwayClassOverride =
-              z -> z <= 5 ? highwayClass.replace(baseClass, FieldValues.CLASS_MOTORWAY) : highwayClass;
             yield 1;
           }
 
